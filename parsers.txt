@@ -1,0 +1,137 @@
+	Parsing using BNF by its very nature must be reresented by a tree. Proceeding through the tokens produces a sructure that leads you to a tree, if you must create a non ambiguous parse path
+
+	NoTe :
+	Tone
+	| Tone digit
+	|Tone Octave
+	|Tone Octave digit
+
+	(Tone(Octave(end,digit),digit))
+
+	The leaves represent possible end points of parsing
+
+	I note that code generation does not necessarily equate to a tree.
+	Code generation is more about mapping and transformation. You map the source code into a structure that maintains all the meaning (semantics) and from which it can be mapped to another language or set of actions in which none of the original meaning is lost.
+
+
+Flex
+/* just like Unix wc */
+%{
+int chars = 0;
+int words = 0;
+int lines = 0;
+%}
+%%
+[a-zA-Z]+ { words++; chars += strlen(yytext); }
+\n { chars++; lines++; }
+. { chars++; }
+%%
+main(int argc, char **argv)
+{
+ yylex();
+ printf("%8d%8d%8d\n", lines, words, chars);
+}
+
+It uses a subset of the stuff I use in notepad++ to fnd tokens
+you can use brackets to group stuff.
+You will not find  thing like \b \s \w \d, but they can be created
+
+[^a-zA-Z_]
+[^ \t\n\r\f\v]
+etc
+
+Note that the actions taken for each recognized token can be used as a way of returning the token and thereby pasing the scanner until yylex is called again, which is how bison parser uses the flex program as a scanner
+%{
+ enum yytokentype {
+ NUMBER = 258,
+ ADD = 259,
+ SUB = 260,
+ MUL = 261,
+ DIV = 262,
+ ABS = 263,
+ EOL = 264
+ };
+ int yylval;
+%}
+%%
+"+" { return ADD; }
+"-" { return SUB; }
+"*" { return MUL; }
+"/" { return DIV; }
+"|" { return ABS; }
+[0-9]+ { yylval = atoi(yytext); return NUMBER; }
+\n { return EOL; }
+[ \t] { /* ignore whitespace */ }
+. { printf("Mystery character %c\n", *yytext); }
+%%
+main(int argc, char **argv)
+{
+ int tok;
+ while(tok = yylex()) {
+ printf("%d", tok);
+ if(tok == NUMBER) printf(" = %d\n", yylval);
+ else printf("\n");
+ }}
+
+
+ Regular expressions (for scanners) and bison grammar we have been tought are all types of BNF grammar, so leads to a question.
+ How do I find a universal method of writting pattern finders I can use in C programs without resorting to flex and Bison. 
+
+ They both can be represented as trees, and trees are easy to write, I use them togther with sample data to design algorithms and handle complex transitions
+
+ If I need a scanner (my pattern being a regular expression) I can still write the tree, instead of a regex. 
+
+ If I need to write regex for php or something that recognizes them, Icould also start with a tree and convert that to regex. And we already know that Bison grammar can be converted to and from trees
+
+ Regex usually represent a sequence. A sequence in which there is an optional preceding part can look funny on tree. You discover that branches will have to converge together to mark the end of two alternate paths so that the next item in the sequence can start. I have also discovered that this merge can help to discover possible factorization points. Tracing back from the point ofconvergence, you might find paths that look the same, these could be factorized into a single path. Using trees therefore can help write  better regexes
+ str_regex = /("([^"\\]|[\\.])*")/
+
+
+BNF Grammar Parsers  and Ambiguities
+
+When you write things like ABCDE, where ABC can be reduced to a NT, and CDE can as well be reduced, then there is ambiguity in the grammar
+
+X =  ABC
+Y =  CDE
+ ABCDE
+could be reduced to XDE
+or    be reduced to ABY
+
+There are 2 possible parse tree, and both of them will be correct according to the grammar.
+
+Yes we are talking context sensitive grammar (at least that I think it is )
+
+The solution is as simple as they get, treat the tokens as though they were operands and operators in a mathematical expression. Say for instance we make B and D operators, and ACE operands, we can assign precedence to the tokens so that ACE have low precedence, and chose to give B and D different precedences higher than AC & E, to determine which parse tree is preferred of the two possible options
+
+The assumption here is that the operators are left associative.
+A+C+E+F=
+(A+C)+E+F (A+C will be reduced first) = 
+(A+C+E)+F ( (A+C)+E will be reduced)  =
+
+and on like that
+
+When we have some right associative "operators", it is a smart thing to inspect them properly while creating precedence rules and assigning associativity
+
+For a posible production:
+
+A+B^C^D
+
+You might want to make ^ have a higher precedence than + and specify right asociation for your parser to correctly create the right tree
+
+bison:
+
+%token NUMBER { /* Lowest precedence */}
+%token PLUS 
+%token POWER  {/* Highest precedence */  }
+%left PLUS   {/* left association */}
+%right POWER
+
+lex:
+%{
+	
+}%
+%
+"+" return PLUS;
+"^" return POWER;
+%%
+
